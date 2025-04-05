@@ -249,7 +249,118 @@ export const useFormState = (formId) => {
     }
   };
 
+  const handleAddQuestion = async () => {
+    if (questions.length >= MAX_QUESTIONS) {
+      addToast(`Maximum of ${MAX_QUESTIONS} questions reached`, "warning");
+      return;
+    }
 
+    try {
+      const newId = Math.max(0, ...questions.map((q) => q.id)) + 1;
+      const newQuestion = { 
+        id: newId, 
+        points: "0", 
+        maxAttempts: "0", 
+        components: [], 
+        backgroundColor: "#FFFFFF",
+        order: questions.length
+      };
+      setQuestions((prev) => [...prev, newQuestion]);
+      setActiveQuestionId(newId);
+      
+      if (formId) {
+        const formDocRef = doc(db, "forms", formId);
+        const questionDocRef = doc(collection(formDocRef, "questions"), newId.toString());
+        await setDoc(questionDocRef, newQuestion);
+      }
+    } catch (error) {
+      console.error("Error adding question:", error);
+      addToast("Failed to add question", "error");
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId) => {
+    try {
+      setQuestions((prev) => {
+        const newQuestions = prev.filter((q) => q.id !== questionId).map((q, index) => ({
+          ...q,
+          order: index
+        }));
+        if (newQuestions.length === 0) {
+          newQuestions.push({ id: 1, points: "0", maxAttempts: "0", components: [], backgroundColor: "#FFFFFF", order: 0 });
+          setActiveQuestionId(1);
+        } else if (activeQuestionId === questionId) {
+          setActiveQuestionId(newQuestions[0]?.id || null);
+        }
+        return newQuestions;
+      });
+
+      if (formId) {
+        const formDocRef = doc(db, "forms", formId);
+        const questionDocRef = doc(collection(formDocRef, "questions"), questionId.toString());
+        await deleteDoc(questionDocRef);
+        
+        const remainingQuestions = questions.filter(q => q.id !== questionId);
+        for (let i = 0; i < remainingQuestions.length; i++) {
+          const q = remainingQuestions[i];
+          const qDocRef = doc(collection(formDocRef, "questions"), q.id.toString());
+          await setDoc(qDocRef, { order: i }, { merge: true });
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting question:", error);
+      addToast("Failed to delete question", "error");
+    }
+  };
+
+  const handleReorderQuestions = async (reordered) => {
+    try {
+      const updatedQuestions = reordered.map((q, index) => ({
+        ...q,
+        order: index
+      }));
+      
+      setQuestions(updatedQuestions);
+      
+      if (formId) {
+        const formDocRef = doc(db, "forms", formId);
+        for (const question of updatedQuestions) {
+          const questionDocRef = doc(collection(formDocRef, "questions"), question.id.toString());
+          await setDoc(
+            questionDocRef,
+            {
+              id: question.id,
+              points: parseInt(question.points, 10) || 0,
+              maxAttempts: parseInt(question.maxAttempts, 10) || 0,
+              components: question.components,
+              backgroundColor: question.backgroundColor || "#FFFFFF",
+              order: question.order
+            },
+            { merge: true }
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error reordering questions:", error);
+      addToast("Failed to reorder questions", "error");
+    }
+  };
+
+  const handleQuestionUpdate = (questionId, updates) => {
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === questionId ? { ...q, ...updates } : q))
+    );
+  };
+
+  const handleComponentUpdate = (questionId, componentId, updates) => {
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId
+          ? { ...q, components: q.components.map((c) => (c.id === componentId ? { ...c, ...updates } : c)) }
+          : q
+      )
+    );
+  };
 
   const handleDeleteComponent = (questionId, componentId) => {
     setQuestions((prev) =>
@@ -274,6 +385,94 @@ export const useFormState = (formId) => {
 
       const formDocRef = doc(db, "forms", formId);
       console.log("useFormState - Saving to Firebase:", { formTitle, formDescription, formImage, category });
+
+      await setDoc(
+        formDocRef,
+        { formTitle, formDescription, formImage, category },
+        { merge: true }
+      );
+
+      const questionsCollRef = collection(formDocRef, "questions");
+      const questionsSnap = await getDocs(questionsCollRef);
+      const existingQuestionIds = questionsSnap.docs.map(doc => parseInt(doc.id));
+
+      for (const question of questions) {
+        const numericPoints = parseInt(question.points, 10) || 0;
+        const numericAttempts = parseInt(question.maxAttempts, 10) || 0;
+
+        const processedComponents = question.components.map((component) => {
+          let c = JSON.parse(JSON.stringify(component));
+          
+          if (typeof c.width === "string") c.width = parseInt(c.width, 10) || 100;
+          if (typeof c.height === "string") c.height = parseInt(c.height, 10) || 40;
+          if (typeof c.opacity === "string") c.opacity = parseFloat(c.opacity) || 1;
+          if (typeof c.opacity !== "number") c.opacity = 1;
+  
+          if (c.type === 'text') {
+            if (!c.text || typeof c.text === 'string') {
+              c.text = {
+                text: c.text || '',
+                format: {
+                  bold: false,
+                  italic: false,
+                  align: 'left',
+                  size: 'text-base',
+                  color: 'text-gray-900',
+                  font: 'Arial'
+                }
+              };
+            }
+            c.text.format = {
+              bold: c.text.format?.bold || false,
+              italic: c.text.format?.italic || false,
+              align: c.text.format?.align || 'left',
+              size: c.text.format?.size || 'text-base',
+              color: c.text.format?.color || 'text-gray-900',
+              font: c.text.format?.font || 'Arial'
+            };
+          }
+          return c;
+        });
+
+        const questionDocRef = doc(
+          collection(formDocRef, "questions"),
+          question.id.toString()
+        );
+
+        await setDoc(
+          questionDocRef,
+          {
+            id: question.id,
+            points: numericPoints,
+            maxAttempts: numericAttempts,
+            components: processedComponents,
+            backgroundColor: question.backgroundColor || "#FFFFFF",
+            order: question.order
+          },
+          { merge: true }
+        );
+      }
+
+      const currentQuestionIds = questions.map(q => q.id);
+      const questionsToDelete = existingQuestionIds.filter(id => !currentQuestionIds.includes(id));
+      for (const id of questionsToDelete) {
+        const questionDocRef = doc(collection(formDocRef, "questions"), id.toString());
+        await deleteDoc(questionDocRef);
+      }
+
+      console.log("useFormState - Form saved successfully to Firebase!");
+      
+      // Finally update the saving state and show success toast
+      setIsSaving(false);
+      addToast("Form saved successfully!", "success");
+    } catch (error) {
+      console.error("useFormState - Error saving form:", error);
+      
+      // Show error toast and update saving state
+      setIsSaving(false);
+      addToast("Error saving form: " + error.message, "error");
+    }
+  };
 
   return {
     formTitle,
