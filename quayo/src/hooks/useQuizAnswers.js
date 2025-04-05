@@ -18,6 +18,48 @@ export function useQuizAnswers(sessionId, respondentId, formId) {
     sessionStorage.getItem(`responseId_${sessionId}`) || null
   );
 
+  // New states for tracking
+  const [attemptsUsed, setAttemptsUsed] = useState({});
+  const [componentStatus, setComponentStatus] = useState({});
+  const [startTime, setStartTime] = useState(null);
+  const [questionTimes, setQuestionTimes] = useState(() => {
+    const saved = sessionStorage.getItem(`questionTimes_${sessionId}`);
+    return saved
+      ? JSON.parse(saved)
+      : {
+          activeQuestion: null,
+          lastActiveTimestamp: null,
+          accumulatedTimes: {},
+        };
+  });
+
+  const handleComponentUpdate = (questionId, componentId, updates) => {
+    setAnswers((prev) => {
+      const newAnswers = { ...prev };
+      if (!newAnswers[questionId]) {
+        newAnswers[questionId] = {};
+      }
+      if (updates.text) {
+        const format = updates.text.format || {
+          bold: false,
+          italic: false,
+          align: "left",
+          size: "text-base",
+          color: "text-gray-900",
+        };
+        newAnswers[questionId][componentId] = {
+          ...updates,
+          text: {
+            text: updates.text.text,
+            format: format,
+          },
+        };
+      } else {
+        newAnswers[questionId][componentId] = updates;
+      }
+      return newAnswers;
+    });
+  };
 
   // Get or create the response document reference
   const getResponseRef = useCallback(() => {
@@ -29,8 +71,37 @@ export function useQuizAnswers(sessionId, respondentId, formId) {
       sessionStorage.setItem(`responseId_${sessionId}`, newRef.id);
       return newRef;
     }
-    
   }, [responseDocId, sessionId]);
+
+  // Initialize quiz start time when first mounted
+  useEffect(() => {
+    const initializeQuiz = async () => {
+      if (!startTime && sessionId && respondentId) {
+        const time = serverTimestamp();
+        setStartTime(time);
+        const responseRef = getResponseRef();
+        await setDoc(
+          responseRef,
+          {
+            startTime: time,
+          },
+          { merge: true }
+        );
+      }
+    };
+    initializeQuiz();
+  }, [sessionId, respondentId, startTime, getResponseRef]);
+
+  // Save question timing to sessionStorage
+  useEffect(() => {
+    if (sessionId) {
+      sessionStorage.setItem(
+        `questionTimes_${sessionId}`,
+        JSON.stringify(questionTimes)
+      );
+    }
+  }, [questionTimes, sessionId]);
+
   // updateAnswer function to update local answers state
   const updateAnswer = useCallback((questionId, componentId, value) => {
     setAnswers((prev) => ({
