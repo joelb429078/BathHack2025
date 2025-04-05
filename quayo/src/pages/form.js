@@ -1,5 +1,5 @@
 // pages/form.js
-import React, { useRef, useCallback, useState, useEffect } from "react";
+import React, { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -13,59 +13,95 @@ import FormInfo from "../components/Form/FormInfo";
 import Canvas from "../components/Form/Canvas";
 import ChatBox from "../components/ChatBox";
 import Loading from "../pages/loading";
-import SuccessOverlay from "../pages/successoverlay"; // Import our success overlay
+import SuccessOverlay from "../pages/successoverlay";
 
 // Hooks
 import { useFormState } from "../hooks/useFormState";
-import { useFormReload } from "../hooks/useFormReload";
 import { useToast } from "../components/Toast";
+
+// Custom hook to track window dimensions
+function useWindowDimensions() {
+  const [dimensions, setDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  
+  return dimensions;
+}
+
+// Custom hook to inject custom styles for FormInfo overlay
+function useFormInfoStyles() {
+  useEffect(() => {
+    const styleTag = document.createElement("style");
+    styleTag.innerHTML = `
+      .form-info-overlay {
+        z-index: 40 !important;
+      }
+      .form-info-overlay::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        z-index: -1;
+      }
+      .form-info-content {
+        margin-bottom: 2rem !important;
+      }
+    `;
+    document.head.appendChild(styleTag);
+    return () => {
+      document.head.removeChild(styleTag);
+    };
+  }, []);
+}
 
 const Form = () => {
   const { formId } = useParams();
   const navigate = useNavigate();
   const formRef = useRef(null);
   const formStateRef = useRef(null);
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(windowWidth >= 768);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(windowWidth >= 768);
   const [showOrientationWarning, setShowOrientationWarning] = useState(false);
   const [showChatBox, setShowChatBox] = useState(false);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
-  // Add these new states for the success overlay
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const { addToast } = useToast();
 
-  // Effect to handle window resize
-  useEffect(() => {
-    const handleResize = () => {
-      const newWidth = window.innerWidth;
-      const newHeight = window.innerHeight;
-      setWindowWidth(newWidth);
-      setWindowHeight(newHeight);
-      
-      // Show orientation warning on mobile in portrait mode
-      if (newWidth < 576 && newWidth < newHeight) {
-        setShowOrientationWarning(true);
-      } else {
-        setShowOrientationWarning(false);
-      }
-      
-      // Auto-collapse sidebars on small screens
-      if (newWidth < 768 && (isLeftSidebarOpen || isRightSidebarOpen)) {
-        setIsLeftSidebarOpen(false);
-        setIsRightSidebarOpen(false);
-      }
-    };
+  // Inject custom styles for the FormInfo overlay
+  useFormInfoStyles();
 
-    window.addEventListener('resize', handleResize);
-    handleResize(); // Initial check
+  // Handle window resize and orientation warning
+  useEffect(() => {
+    if (windowWidth < 576 && windowWidth < windowHeight) {
+      setShowOrientationWarning(true);
+    } else {
+      setShowOrientationWarning(false);
+    }
     
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [windowWidth, windowHeight, isLeftSidebarOpen, isRightSidebarOpen]);
+    // Auto-collapse or expand sidebars based on screen width
+    if (windowWidth < 768) {
+      setIsLeftSidebarOpen(false);
+      setIsRightSidebarOpen(false);
+    } else {
+      setIsLeftSidebarOpen(true);
+      setIsRightSidebarOpen(true);
+    }
+  }, [windowWidth, windowHeight]);
 
   const {
     formTitle,
@@ -87,34 +123,27 @@ const Form = () => {
     handleDeleteComponent,
     handleDrop,
     handleQuestionUpdate,
-    isSaving
+    isSaving,
   } = useFormState(formId);
 
-  // Check URL parameters on load to see if we should select a specific question
+  // Select question based on URL parameters
   useEffect(() => {
-    // Check if we have a "selectQuestion" query parameter
     const params = new URLSearchParams(window.location.search);
-    const questionToSelect = params.get('selectQuestion');
-    
-    if (questionToSelect && questions.some(q => q.id === parseInt(questionToSelect))) {
-      setActiveQuestionId(parseInt(questionToSelect));
+    const questionToSelect = params.get("selectQuestion");
+    if (questionToSelect && questions.some(q => q.id === parseInt(questionToSelect, 10))) {
+      setActiveQuestionId(parseInt(questionToSelect, 10));
     }
   }, [questions, setActiveQuestionId]);
 
-  // Improved reload function that passes question selection through URL params
+  // Calculate sidebar width
+  const leftSidebarWidth = useMemo(() => (windowWidth < 1280 ? 240 : 280), [windowWidth]);
+
+  // Reload form function with cache-busting and optional question selection
   const reloadForm = useCallback(async (questionToSelect = null) => {
-    // Show loading indicator
     setIsLoadingQuestions(true);
-    
     try {
-      // Build URL with cache-busting and optional question selection
-      const url = `/forms/${formId}?reload=${Date.now()}${
-        questionToSelect ? `&selectQuestion=${questionToSelect}` : ''
-      }`;
-      
-      // Force component reload by navigating
+      const url = `/forms/${formId}?reload=${Date.now()}${questionToSelect ? `&selectQuestion=${questionToSelect}` : ''}`;
       navigate(url, { replace: true });
-      
       console.log("Form reloaded successfully");
     } catch (error) {
       console.error("Error reloading form:", error);
@@ -123,33 +152,19 @@ const Form = () => {
     }
   }, [navigate, formId, addToast]);
 
-  // Improved handleQuestionsAdded that shows the success overlay
+  // Handle questions added from AI with a success overlay and form reload
   const handleQuestionsAdded = useCallback(async (count, newQuestionIds) => {
     console.log(`${count} questions added by AI. Refreshing form...`);
-    
     try {
-      // Close the ChatBox first
       setShowChatBox(false);
-      
-      // Then show success overlay
       setSuccessMessage(`${count} question${count !== 1 ? 's' : ''} added successfully!`);
       setShowSuccessOverlay(true);
-      
-      // Wait for the overlay to display before continuing
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Then navigate to refresh the page, passing the first new question ID to select
       const questionToSelect = newQuestionIds && newQuestionIds.length > 0 ? newQuestionIds[0] : null;
-      
-      // Start loading indicator
       setIsLoadingQuestions(true);
-      
-      // Wait for the overlay animation to play
-      // This timeout will be cleared when component unmounts during navigation
       setTimeout(() => {
         reloadForm(questionToSelect);
       }, 1500);
-      
     } catch (error) {
       console.error("Error refreshing form after adding questions:", error);
       addToast("Questions were added but there was an error refreshing the form.", "error");
@@ -158,19 +173,20 @@ const Form = () => {
     }
   }, [reloadForm, addToast]);
 
-  // Store formState references to access from ChatBox
+  // Expose formState for the ChatBox component
   useEffect(() => {
     formStateRef.current = {
       saveToFirebase,
-      loadFormData: reloadForm
+      loadFormData: reloadForm,
     };
   }, [saveToFirebase, reloadForm]);
 
-  // Handler to access the formState from ChatBox
+  // Pass form state reference to ChatBox
   const handleFormStateReady = useCallback((stateRef) => {
     stateRef.current = formStateRef.current;
   }, []);
 
+  // Handle form image upload
   const handleFormImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -180,55 +196,19 @@ const Form = () => {
     }
   };
 
+  // Navigate back to forms list
   const handleBack = useCallback(() => {
     navigate("/", { replace: true });
   }, [navigate]);
 
-  // Calculate sidebar width based on screen size
-  const leftSidebarWidth = windowWidth < 1280 ? 240 : 280;
-
-  // Add CSS to the head to fix FormInfo z-index
-  useEffect(() => {
-    // Add a style tag to fix FormInfo z-index
-    const styleTag = document.createElement('style');
-    styleTag.innerHTML = `
-      /* Fix FormInfo z-index to ensure it appears above sidebars but below header */
-      .form-info-overlay {
-        z-index: 40 !important;
-      }
-      
-      /* Fix backdrop blur effect */
-      .form-info-overlay::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(5px);
-        z-index: -1;
-      }
-      
-      /* Fix centering and add bottom spacing */
-      .form-info-content {
-        margin-bottom: 2rem !important;
-      }
-    `;
-    document.head.appendChild(styleTag);
-    
-    return () => {
-      document.head.removeChild(styleTag);
-    };
-  }, []);
-
   return (
     <div className="min-h-screen bg-gray-100 fixed inset-0 flex flex-col">
-      {/* Success Overlay - New Component */}
       <SuccessOverlay 
         show={showSuccessOverlay}
         message={successMessage}
         onClose={() => setShowSuccessOverlay(false)}
       />
 
-      {/* Mobile orientation warning */}
       {showOrientationWarning && (
         <div className="fixed inset-0 bg-black bg-opacity-90 z-[100] flex flex-col items-center justify-center text-white p-6">
           <div className="transform rotate-90 mb-4">
@@ -250,33 +230,19 @@ const Form = () => {
         </div>
       )}
 
-      {/* Loading overlay when saving form */}
-      {isSaving && (
+      {(isSaving || isLoadingQuestions) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
           <Loading 
-            text="Saving form..." 
-            type="spinner" 
-            theme="blue" 
+            text={isSaving ? "Saving form..." : "Updating questions..."}
+            type={isSaving ? "spinner" : "dots"}
+            theme={isSaving ? "blue" : "light"}
             size="large" 
           />
         </div>
       )}
 
-      {/* Loading overlay when questions are being loaded */}
-      {isLoadingQuestions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
-          <Loading 
-            text="Updating questions..." 
-            type="dots" 
-            theme="light" 
-            size="large" 
-          />
-        </div>
-      )}
-
-      {/* Top Nav - INCREASED Z-INDEX to 50 */}
+      {/* Top Navigation Bar */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm px-4 md:px-6 py-4 flex items-center overflow-visible">
-        {/* Sidebar toggle button - shown conditionally */}
         {!isLeftSidebarOpen && (
           <button 
             onClick={() => setIsLeftSidebarOpen(true)}
@@ -297,7 +263,7 @@ const Form = () => {
 
         <div className="ml-auto flex items-center gap-2 md:gap-4 overflow-visible">
           <button
-            onClick={() => setShowFormInfo((prev) => !prev)}
+            onClick={() => setShowFormInfo(prev => !prev)}
             className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow whitespace-nowrap"
           >
             <PencilLine size={16} />
@@ -314,16 +280,13 @@ const Form = () => {
           </button>
 
           <button
-            onClick={() => {
-              navigate(`/sessions/${formId}`);
-            }}
+            onClick={() => navigate(`/sessions/${formId}`)}
             className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition-colors whitespace-nowrap"
           >
             <Users size={16} />
             <span className="hidden sm:inline">Go to Sessions</span>
           </button>
 
-          {/* Button to open the ChatBox popup */}
           <button
             onClick={() => setShowChatBox(true)}
             className="group relative flex items-center gap-2 px-2 md:px-4 py-2 rounded-xl 
@@ -346,18 +309,15 @@ const Form = () => {
       </div>
 
       <div className="flex flex-1 pt-16 overflow-hidden">
-        {/* Left Sidebar - Collapsible - z-index 30 already below header */}
+        {/* Left Sidebar */}
         <div 
-          className={`fixed md:static inset-y-0 left-0 z-30 bg-white shadow-lg transform transition-transform duration-300 pt-16 md:pt-0 ${
-            isLeftSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
+          className={`fixed md:static inset-y-0 left-0 z-30 bg-white shadow-lg transform transition-transform duration-300 pt-16 md:pt-0 ${isLeftSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
           style={{ 
-            width: isLeftSidebarOpen ? (windowWidth < 768 ? '240px' : leftSidebarWidth + 'px') : '0',
+            width: isLeftSidebarOpen ? (windowWidth < 768 ? '240px' : `${leftSidebarWidth}px`) : '0',
             maxWidth: '85vw',
             overflow: 'hidden'
           }}
         >
-          {/* Close button for sidebar */}
           <div className="absolute top-3 right-3 p-1 bg-gray-100 rounded-md text-gray-600">
             <button 
               onClick={() => setIsLeftSidebarOpen(false)}
@@ -400,35 +360,33 @@ const Form = () => {
             handleFormImageUpload={handleFormImageUpload}
           />
 
-          {/* Main Canvas */}
-          <Canvas
-            formRef={formRef}
-            question={questions.find((q) => q.id === activeQuestionId)}
-            onComponentUpdate={handleComponentUpdate}
-            onDeleteComponent={handleDeleteComponent}
-            handleDrop={handleDrop}
-            showFormInfo={showFormInfo}
-            onQuestionUpdate={handleQuestionUpdate}
-            windowWidth={windowWidth}
-            windowHeight={windowHeight}
-            isLeftSidebarOpen={isLeftSidebarOpen}
-            leftSidebarWidth={isLeftSidebarOpen ? leftSidebarWidth : 0}
-            isRightSidebarOpen={isRightSidebarOpen}
-            rightSidebarWidth={isRightSidebarOpen ? 64 : 0}
-          />
+          <DndProvider backend={HTML5Backend}>
+            <Canvas
+              formRef={formRef}
+              question={questions.find((q) => q.id === activeQuestionId)}
+              onComponentUpdate={handleComponentUpdate}
+              onDeleteComponent={handleDeleteComponent}
+              handleDrop={handleDrop}
+              showFormInfo={showFormInfo}
+              onQuestionUpdate={handleQuestionUpdate}
+              windowWidth={windowWidth}
+              windowHeight={windowHeight}
+              isLeftSidebarOpen={isLeftSidebarOpen}
+              leftSidebarWidth={isLeftSidebarOpen ? leftSidebarWidth : 0}
+              isRightSidebarOpen={isRightSidebarOpen}
+              rightSidebarWidth={isRightSidebarOpen ? 64 : 0}
+            />
+          </DndProvider>
         </div>
 
-        {/* Right side toolbar - z-index 20 already below header and left sidebar */}
+        {/* Right Sidebar */}
         <div 
-          className={`fixed md:static inset-y-0 right-0 z-20 w-16 bg-white shadow-xl transform transition-transform duration-300 pt-16 md:pt-0 ${
-            isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
+          className={`fixed md:static inset-y-0 right-0 z-20 w-16 bg-white shadow-xl transform transition-transform duration-300 pt-16 md:pt-0 ${isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
           style={{ 
-            overscrollBehavior: 'contain', // Prevent scroll chaining
-            isolation: 'isolate' // Create a new stacking context
+            overscrollBehavior: 'contain',
+            isolation: 'isolate'
           }}
         >
-          {/* Close button for mobile */}
           <div className="absolute top-3 left-3 p-1 bg-gray-100 rounded-md text-gray-600 md:hidden">
             <button 
               onClick={() => setIsRightSidebarOpen(false)}
@@ -444,7 +402,6 @@ const Form = () => {
           </div>
         </div>
         
-        {/* Toggle button for right sidebar - only shown when closed */}
         {!isRightSidebarOpen && (
           <button
             onClick={() => setIsRightSidebarOpen(true)}
@@ -456,7 +413,6 @@ const Form = () => {
         )}
       </div>
 
-      {/* Bottom Toolbar properly centered */}
       <Toolbar 
         questionId={activeQuestionId} 
         isLeftSidebarOpen={isLeftSidebarOpen}
@@ -465,7 +421,6 @@ const Form = () => {
         windowWidth={windowWidth}
       />
 
-      {/* ChatBox Popup Modal */}
       {showChatBox && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="w-11/12 md:w-3/4 lg:w-1/2 h-3/4 max-h-[80vh]">
