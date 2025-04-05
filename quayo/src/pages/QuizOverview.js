@@ -11,6 +11,26 @@ import {
 } from "../components/Quiz/QuizAnswer";
 import { Eye, ChevronLeft, PlusCircle, Check, ExternalLink, ClipboardCopy, Share2, Edit } from "lucide-react";
 
+/* ------------------------------------------------------------------------
+   Default sizes (copied from Quiz.js)
+------------------------------------------------------------------------*/
+const defaultSizes = {
+  text: { width: 256, height: 64 },
+  image_upload: { width: 160, height: 160 },
+  line: { width: 800, height: 600 },
+  multiple_choice_single: { width: 300, height: 150 },
+  multiple_choice_multi: { width: 300, height: 150 },
+  true_false: { width: 100, height: 50 },
+  custom_component: { width: 384, height: 384 },
+  short_text_answer: { width: 250, height: 50 },
+  single_checkbox: { width: 100, height: 50 },
+  toggle_button: { width: 100, height: 40 },
+  numeric_slider: { width: 320, height: 160 },
+  discrete_slider: { width: 300, height: 50 },
+  ranking: { width: 300, height: 200 },
+  matching_pairs: { width: 300, height: 200 },
+  shape: { width: 100, height: 100 },
+};
 
 /* ------------------------------------------------------------------------
    getComponentStyle (copied from Quiz.js)
@@ -169,6 +189,21 @@ function StaticMatchingPairsComponent({ comp, scale = 1 }) {
   );
 }
 
+const QuizOverview = () => {
+  const { formId } = useParams();
+  const navigate = useNavigate();
+  const { addToast } = useToast();
+
+  const [formData, setFormData] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userFormsCount, setUserFormsCount] = useState(0);
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [isOwnForm, setIsOwnForm] = useState(false);
+
   useEffect(() => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
@@ -282,6 +317,45 @@ function StaticMatchingPairsComponent({ comp, scale = 1 }) {
         addToast("Failed to copy link", "error");
       });
   };
+
+  const handleNavigateBack = (e) => {
+    e.preventDefault();
+    navigate("/", { replace: true });
+  };
+
+  const handleEditForm = (e) => {
+    e.preventDefault();
+    navigate(`/forms/${formId}`, { replace: true });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="relative w-20 h-20">
+          <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full"></div>
+          <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+        </div>
+        <p className="mt-4 text-lg font-medium text-gray-600">Loading quiz...</p>
+      </div>
+    );
+  }
+
+  if (!formData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full border-l-4 border-red-500">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Quiz not found</h2>
+          <p className="text-gray-600 mb-6">The quiz you're looking for doesn't exist or has been removed.</p>
+          <button
+            onClick={handleNavigateBack}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16">
