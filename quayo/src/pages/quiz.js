@@ -106,20 +106,6 @@ const ResponsiveStyles = () => (
   <style>{responsiveStyles}</style>
 );
 
-// Main wrapper component
-const QuizWithToast = () => {
-  React.useEffect(() => {
-    // Add class to body when quiz is active to prevent horizontal scrolling
-    document.body.classList.add('quiz-active');
-    
-    return () => {
-      // Remove class when component unmounts
-      document.body.classList.remove('quiz-active');
-    };
-  }, []);
-
-  return (
-    <ToastProvider>
       <ResponsiveStyles />
       <Quiz />
     </ToastProvider>
