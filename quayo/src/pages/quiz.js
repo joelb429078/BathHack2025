@@ -106,6 +106,18 @@ const ResponsiveStyles = () => (
   <style>{responsiveStyles}</style>
 );
 
+// Main wrapper component
+const QuizWithToast = () => {
+  React.useEffect(() => {
+    document.body.classList.add('quiz-active');
+    
+    return () => {
+      document.body.classList.remove('quiz-active');
+    };
+  }, []);
+
+  return (
+    <ToastProvider>
       <ResponsiveStyles />
       <Quiz />
     </ToastProvider>
