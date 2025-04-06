@@ -1,4 +1,15 @@
 // src/components/Quiz/quizUtils.js
+
+// Helper function to get shuffled order
+export function getShuffledOrder(n) {
+    const arr = Array.from({ length: n }, (_, i) => i);
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+  
   // Check if answer is correct based on question type
   export function checkScorableCorrectness(component, userAnswer) {
     switch (component.type) {
@@ -104,6 +115,23 @@
     }
   }
   
+  // Check if a component is of a scorable type
+  export function isScorableType(type) {
+    return [
+      "true_false",
+      "multiple_choice_single",
+      "multiple_choice_multi",
+      "custom_component",
+      "short_text_answer",
+      "single_checkbox",
+      "toggle_button",
+      "numeric_slider",
+      "discrete_slider",
+      "ranking",
+      "matching_pairs",
+      "shape",
+    ].includes(type);
+  }
   
   // Check if a required question is unanswered
   export function isRequiredAndUnanswered(questionId, comp, answers) {
