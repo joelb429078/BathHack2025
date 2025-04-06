@@ -23,6 +23,23 @@ import Loading from "./pages/loading";
 import Login from "./pages/login";
 import Home from "./pages/home";
 import Form from "./pages/form";
+import Sessions from "./pages/sessions";
+import Quiz from "./pages/quiz";
+import FormEntrance from "./pages/userentrance";
+import QuizComplete from "./pages/quizComplete";
+import ResultsDashboard from "./pages/results";
+import AdminHome from "./pages/adminHome";
+import QuizOverview from "./pages/QuizOverview";
+import LandingPage from "./pages/landing";
+import TestPage from "./pages/testoutput";
+
+// Chatbot
+import ChatbotPage from "./components/ChatBox";
+
+
+// Payment Pages
+import PaymentPage from "./stripe/paymentpage"; // Payment page in src/stripe
+import PaymentSuccess from "./pages/paymentsuccess"; // Success page in src/files
 
 // Protected route for admin/creator routes
 const AdminRoute = ({ children }) => {
@@ -184,7 +201,9 @@ function App() {
             <Route path="/" element={<HomeRedirect />} />
             
             {/* Public Routes */}
+            <Route path="/landing" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/form-entrance/:sessionId" element={<FormEntrance />} />
 
             {/* Admin/User Routes */}
             <Route
@@ -201,6 +220,75 @@ function App() {
                 <AdminRoute>
                   <Form />
                 </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminHome />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/sessions/:formId"
+              element={
+                <AdminRoute>
+                  <Sessions />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/results/:formId"
+              element={
+                <AdminRoute>
+                  <ResultsDashboard />
+                </AdminRoute>
+              }
+            />
+
+            {/* Quiz Routes */}
+            <Route
+              path="/quiz/:sessionId"
+              element={
+                <QuizRoute>
+                  <Quiz />
+                </QuizRoute>
+              }
+            />
+            <Route path="/quiz/:sessionId/complete" element={<QuizComplete />} />
+
+            {/* Quiz Overview Route */}
+            <Route
+              path="/quiz-overview/:formId"
+              element={
+                <ProtectedRoute>
+                  <QuizOverview />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Chatbot Route */}
+            <Route path="/chatbot" element={<ChatbotPage />} />
+
+            {/* Test Route */}
+            <Route path="/test" element={<TestPage />} />
+
+            {/* Payment Routes */}
+            <Route
+              path="/payment"
+              element={
+                <ProtectedRoute>
+                  <PaymentPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payment-success"
+              element={
+                <ProtectedRoute>
+                  <PaymentSuccess />
+                </ProtectedRoute>
               }
             />
 
